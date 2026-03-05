@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>天气服务设置</title>
+    <link rel="stylesheet" href="../../renderer/titlebar.css" />
+    <link rel="stylesheet" href="../../renderer/settings.css" />
+    <link rel="stylesheet" href="../../renderer/remixicon-local.css" />
+    <style>
+      .form { display: flex; flex-direction: column; gap: 12px; }
+      .inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      .setting-action select, .setting-action input[type="text"], .setting-action input[type="number"] { min-width: 220px; }
+      .search-results { max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; margin-top: 8px; }
+      .search-result-item { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border); transition: background 0.15s; }
+      .search-result-item:last-child { border-bottom: none; }
+      .search-result-item:hover { background: var(--item-bg); }
+      .search-result-item .name { font-weight: 600; }
+      .search-result-item .info { font-size: 12px; color: var(--muted); margin-top: 2px; }
+      .weather-preview { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-top: 12px; }
+      .weather-preview .temp { font-size: 48px; font-weight: 700; }
+      .weather-preview .condition { font-size: 18px; color: var(--muted); }
+      .weather-preview .details { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
+      .weather-preview .detail-item { text-align: center; }
+      .weather-preview .detail-item .label { font-size: 12px; color: var(--muted); }
+      .weather-preview .detail-item .value { font-size: 16px; font-weight: 600; }
+      .loading { opacity: 0.6; pointer-events: none; }
+      .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+      .btn.primary:hover { filter: brightness(1.1); }
+    </style>
+  </head>
+  <body>
+    <div class="titlebar">
+      <div class="drag">天气服务设置</div>
+      <div class="window-actions">
+        <button class="win-btn" data-act="minimize" title="最小化"><i class="ri-subtract-line"></i></button>
+        <button class="win-btn max" data-act="maximize" title="最大化"><i class="ri-checkbox-blank-line"></i></button>
+        <button class="win-btn close" data-act="close" title="关闭"><i class="ri-close-line"></i></button>
+      </div>
+    </div>
+    <div class="wrap">
+      <header>
+        <h1>天气服务设置</h1>
+        <p>配置默认天气位置，支持城市搜索、经纬度输入或IP定位。</p>
+      </header>
+
+      <div class="subnav">
+        <button class="sub-item active" data-tab="location"><i class="ri-map-pin-line"></i> 位置设置</button>
+        <button class="sub-item" data-tab="preview"><i class="ri-sun-line"></i> 天气预览</button>
+        <button class="sub-item" data-tab="advanced"><i class="ri-settings-4-line"></i> 高级</button>
+      </div>
+
+      <div id="tab-location" class="panel">
+        <div class="form">
+          <div class="setting-item">
+            <div class="setting-icon"><i class="ri-toggle-line"></i></div>
+            <div class="setting-main">
+              <div class="setting-title">启用天气服务</div>
+              <div class="setting-desc">关闭后其他插件将无法获取天气数据。</div>
+            </div>
+            <div class="setting-action">
+              <label class="switch"><input id="enableService" type="checkbox" /><span class="slider"></span></label>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-icon"><i class="ri-navigation-line"></i></div>
+            <div class="setting-main">
+              <div class="setting-title">定位方式</div>
+              <div class="setting-desc">选择获取默认位置的方式。</div>
+            </div>
+            <div class="setting-action">
+              <select id="locationMode">
+                <option value="manual">手动设置</option>
+                <option value="ip">IP自动定位</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="manualLocationSection">
+            <div class="setting-item full">
+              <div class="setting-main">
+                <div class="setting-title">搜索城市</div>
+                <div class="setting-desc">输入城市名称搜索并选择。</div>
+                <div class="inline" style="margin-top: 8px;">
+                  <input type="text" id="searchInput" placeholder="输入城市名称..." style="flex: 1;" />
+                  <button class="btn primary" id="searchBtn"><i class="ri-search-line"></i> 搜索</button>
+                </div>
+                <div id="searchResults" class="search-results" style="display: none;"></div>
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-icon"><i class="ri-map-pin-2-line"></i></div>
+              <div class="setting-main">
+                <div class="setting-title">当前默认城市</div>
+                <div class="setting-desc" id="currentCityDesc">未设置</div>
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-icon"><i class="ri-compass-3-line"></i></div>
+              <div class="setting-main">
+                <div class="setting-title">或输入经纬度</div>
+                <div class="setting-desc">手动输入经纬度坐标。</div>
+                <div class="inline" style="margin-top: 8px;">
+                  <input type="number" id="latInput" placeholder="纬度" step="0.0001" style="width: 140px;" />
+                  <input type="number" id="lonInput" placeholder="经度" step="0.0001" style="width: 140px;" />
+                  <button class="btn" id="setGeoBtn"><i class="ri-check-line"></i> 设置</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-preview" class="panel" hidden>
+        <div class="form">
+          <div class="setting-item">
+            <div class="setting-icon"><i class="ri-refresh-line"></i></div>
+            <div class="setting-main">
+              <div class="setting-title">刷新天气</div>
+              <div class="setting-desc">获取最新的天气数据。</div>
+            </div>
+            <div class="setting-action">
+              <button class="btn" id="refreshBtn"><i class="ri-refresh-line"></i> 刷新</button>
+            </div>
+          </div>
+
+          <div id="weatherPreview" class="weather-preview">
+            <div style="text-align: center; color: var(--muted); padding: 40px;">
+              <i class="ri-cloud-line" style="font-size: 48px;"></i>
+              <p>点击刷新获取天气数据</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-advanced" class="panel" hidden>
+        <div class="form">
+          <div class="setting-item">
+            <div class="setting-icon"><i class="ri-timer-line"></i></div>
+            <div class="setting-main">
+              <div class="setting-title">自动更新间隔</div>
+              <div class="setting-desc">天气数据自动刷新间隔（分钟），0表示不自动更新。</div>
+            </div>
+            <div class="setting-action">
+              <input type="number" id="updateInterval" min="0" max="1440" step="5" style="width: 100px;" />
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-icon"><i class="ri-code-line"></i></div>
+            <div class="setting-main">
+              <div class="setting-title">API说明</div>
+              <div class="setting-desc">本插件使用小米天气API提供天气数据服务。</div>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-icon"><i class="ri-plug-line"></i></div>
+            <div class="setting-main">
+              <div class="setting-title">插件调用接口</div>
+              <div class="setting-desc">
+                其他插件可通过以下接口调用：<br>
+                <code>pluginCall('service-weather', 'getWeather', [cityId])</code> - 获取天气<br>
+                <code>pluginCall('service-weather', 'searchCity', [keyword])</code> - 搜索城市<br>
+                <code>pluginCall('service-weather', 'getWeatherByGeo', [lat, lon])</code> - 经纬度查询<br>
+                <code>pluginCall('service-weather', 'getWeatherByIp', [])</code> - IP定位查询
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <script src="settings.js"></script>
+  </body>
+</html>

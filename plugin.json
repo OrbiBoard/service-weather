@@ -1,0 +1,65 @@
+{
+  "name": "服务.天气",
+  "icon": "ri-sun-line",
+  "version": "1.0.0",
+  "author": "OrbiBoard",
+  "type": "service",
+  "description": "天气服务插件：提供天气查询功能，支持城市搜索、经纬度定位、IP定位",
+  "id": "service-weather",
+  "actions": [
+    {
+      "id": "openSettings",
+      "text": "天气设置",
+      "target": "openSettings",
+      "icon": "ri-settings-3-line"
+    }
+  ],
+  "configSchema": {
+    "enabled": {
+      "type": "boolean",
+      "label": "启用天气服务",
+      "desc": "总开关",
+      "default": true
+    },
+    "locationMode": {
+      "type": "select",
+      "label": "定位方式",
+      "desc": "选择默认位置的定位方式",
+      "options": [
+        "manual",
+        "ip"
+      ],
+      "default": "manual"
+    },
+    "defaultCityId": {
+      "type": "string",
+      "label": "默认城市ID",
+      "desc": "默认天气查询的城市ID",
+      "default": ""
+    },
+    "defaultCityName": {
+      "type": "string",
+      "label": "默认城市名称",
+      "desc": "默认城市显示名称",
+      "default": ""
+    },
+    "defaultLat": {
+      "type": "number",
+      "label": "默认纬度",
+      "desc": "经纬度定位时的纬度",
+      "default": 0
+    },
+    "defaultLon": {
+      "type": "number",
+      "label": "默认经度",
+      "desc": "经纬度定位时的经度",
+      "default": 0
+    },
+    "updateInterval": {
+      "type": "number",
+      "label": "更新间隔(分钟)",
+      "desc": "天气数据自动更新间隔，0表示不自动更新",
+      "default": 30
+    }
+  }
+}
