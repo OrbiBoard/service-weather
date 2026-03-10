@@ -1,0 +1,45 @@
+{
+  "id": "weather-alert-widget",
+  "name": "气象预警",
+  "icon": "ri-alarm-warning-line",
+  "version": "1.0.0",
+  "type": "component",
+  "author": "OrbiBoard",
+  "entry": "index.html",
+  "description": "显示当前地区的气象预警信息",
+  "group": "desktop_widget",
+  "recommendedSize": {
+    "width": 280,
+    "height": 180
+  },
+  "configSchema": {
+    "useCustomLocation": {
+      "type": "boolean",
+      "label": "使用独立定位",
+      "desc": "启用后可为此组件设置独立的城市位置",
+      "default": false
+    },
+    "customCityId": {
+      "type": "string",
+      "label": "城市ID",
+      "desc": "独立定位的城市ID（需先启用独立定位）",
+      "default": ""
+    },
+    "customCityName": {
+      "type": "string",
+      "label": "城市名称",
+      "desc": "独立定位的城市名称",
+      "default": ""
+    },
+    "theme": {
+      "type": "select",
+      "label": "主题",
+      "default": "auto",
+      "options": [
+        { "label": "跟随系统", "value": "auto" },
+        { "label": "浅色", "value": "light" },
+        { "label": "深色", "value": "dark" }
+      ]
+    }
+  }
+}

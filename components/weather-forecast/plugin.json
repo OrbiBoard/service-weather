@@ -1,0 +1,53 @@
+{
+  "id": "weather-forecast-widget",
+  "name": "近5日天气",
+  "icon": "ri-calendar-line",
+  "version": "1.0.0",
+  "type": "component",
+  "author": "OrbiBoard",
+  "entry": "index.html",
+  "description": "显示未来5天的天气预报",
+  "group": "desktop_widget",
+  "recommendedSize": {
+    "width": 320,
+    "height": 200
+  },
+  "configSchema": {
+    "useCustomLocation": {
+      "type": "boolean",
+      "label": "使用独立定位",
+      "desc": "启用后可为此组件设置独立的城市位置",
+      "default": false
+    },
+    "customCityId": {
+      "type": "string",
+      "label": "城市ID",
+      "desc": "独立定位的城市ID（需先启用独立定位）",
+      "default": ""
+    },
+    "customCityName": {
+      "type": "string",
+      "label": "城市名称",
+      "desc": "独立定位的城市名称",
+      "default": ""
+    },
+    "theme": {
+      "type": "select",
+      "label": "主题",
+      "default": "auto",
+      "options": [
+        { "label": "跟随系统", "value": "auto" },
+        { "label": "浅色", "value": "light" },
+        { "label": "深色", "value": "dark" }
+      ]
+    },
+    "days": {
+      "type": "range",
+      "label": "显示天数",
+      "default": 5,
+      "min": 3,
+      "max": 7,
+      "step": 1
+    }
+  }
+}

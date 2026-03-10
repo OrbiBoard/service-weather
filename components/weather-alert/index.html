@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      transition: background 0.3s, color 0.3s;
+    }
+    .container {
+      width: 100%;
+      height: 100%;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .title {
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .location {
+      font-size: 11px;
+      opacity: 0.6;
+      margin-top: 2px;
+    }
+    .alerts-container {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .alert-item {
+      padding: 10px 12px;
+      border-radius: 8px;
+      border-left: 4px solid;
+      background: rgba(128, 128, 128, 0.08);
+    }
+    .alert-red { border-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+    .alert-orange { border-color: #f97316; background: rgba(249, 115, 22, 0.1); }
+    .alert-yellow { border-color: #eab308; background: rgba(234, 179, 8, 0.1); }
+    .alert-blue { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
+    .alert-unknown { border-color: #6b7280; }
+    .alert-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .alert-type {
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .alert-level {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+    .level-red { background: #ef4444; color: white; }
+    .level-orange { background: #f97316; color: white; }
+    .level-yellow { background: #eab308; color: #333; }
+    .level-blue { background: #3b82f6; color: white; }
+    .alert-title {
+      font-size: 12px;
+      font-weight: 500;
+      margin-bottom: 2px;
+    }
+    .alert-content {
+      font-size: 11px;
+      opacity: 0.8;
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .no-alerts {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.5;
+    }
+    .no-alerts i {
+      font-size: 32px;
+      margin-bottom: 8px;
+      color: #22c55e;
+    }
+    .no-alerts span {
+      font-size: 12px;
+    }
+    .loading, .error {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      opacity: 0.6;
+    }
+    .loading i, .error i {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+    .refresh-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      opacity: 0.5;
+      padding: 4px;
+      transition: opacity 0.2s;
+    }
+    .refresh-btn:hover { opacity: 1; }
+    
+    .theme-light { background: rgba(255,255,255,0.95); color: #333; }
+    .theme-dark { background: rgba(30,30,40,0.9); color: #fff; }
+  </style>
+  <link rel="stylesheet" href="../../../../renderer/remixicon-local.css">
+</head>
+<body>
+  <div class="container" id="app">
+    <div class="loading">
+      <i class="ri-loader-4-line"></i>
+      <span>加载中...</span>
+    </div>
+  </div>
+  <script>
+    const { ipcRenderer } = require('electron');
+    
+    let config = {
+      useCustomLocation: false,
+      customCityId: '',
+      customCityName: '',
+      theme: 'auto'
+    };
+    
+    let weatherData = null;
+    
+    function applyTheme() {
+      const body = document.body;
+      body.classList.remove('theme-light', 'theme-dark');
+      let theme = config.theme;
+      if (theme === 'auto') {
+        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        theme = isDark ? 'dark' : 'light';
+      }
+      body.classList.add(`theme-${theme}`);
+    }
+    
+    function getAlertLevelClass(level) {
+      const levelMap = {
+        '红色': 'red', '红': 'red',
+        '橙色': 'orange', '橙': 'orange',
+        '黄色': 'yellow', '黄': 'yellow',
+        '蓝色': 'blue', '蓝': 'blue'
+      };
+      return levelMap[level] || 'unknown';
+    }
+    
+    function getAlertIcon(type) {
+      const iconMap = {
+        '暴雨': 'ri-heavy-showers-line', '暴雪': 'ri-snowy-fill',
+        '台风': 'ri-windy-line', '大风': 'ri-windy-line',
+        '雷电': 'ri-thunderstorms-line', '冰雹': 'ri-hail-line',
+        '大雾': 'ri-mist-line', '霾': 'ri-smog-line',
+        '高温': 'ri-temp-hot-line', '寒潮': 'ri-temp-cold-line',
+        '干旱': 'ri-sun-line', '洪水': 'ri-water-flash-line',
+        '沙尘暴': 'ri-sandstorm-line', '道路结冰': 'ri-snowflake-line'
+      };
+      for (const key of Object.keys(iconMap)) {
+        if (type.includes(key)) return iconMap[key];
+      }
+      return 'ri-alarm-warning-line';
+    }
+    
+    function parseAlerts(data) {
+      const alerts = [];
+      try {
+        const raw = data?.raw;
+        if (raw && raw.alert) {
+          const alertData = raw.alert;
+          if (Array.isArray(alertData)) {
+            alertData.forEach(a => {
+              if (a && a.type) {
+                alerts.push({
+                  type: a.type || '未知预警',
+                  level: a.level || '',
+                  title: a.title || a.type || '气象预警',
+                  content: a.description || a.content || ''
+                });
+              }
+            });
+          } else if (typeof alertData === 'object') {
+            if (alertData.type) {
+              alerts.push({
+                type: alertData.type || '未知预警',
+                level: alertData.level || '',
+                title: alertData.title || alertData.type || '气象预警',
+                content: alertData.description || alertData.content || ''
+              });
+            }
+          }
+        }
+      } catch (e) {}
+      return alerts;
+    }
+    
+    function render() {
+      const app = document.getElementById('app');
+      
+      if (!weatherData || weatherData.ok === false) {
+        app.innerHTML = `
+          <div class="error">
+            <i class="ri-cloud-off-line"></i>
+            <span>${weatherData?.error || '获取预警失败'}</span>
+          </div>
+        `;
+        return;
+      }
+      
+      const location = weatherData.location || {};
+      const alerts = parseAlerts(weatherData);
+      
+      let contentHtml = '';
+      if (alerts.length === 0) {
+        contentHtml = `
+          <div class="no-alerts">
+            <i class="ri-shield-check-line"></i>
+            <span>当前无气象预警</span>
+          </div>
+        `;
+      } else {
+        contentHtml = alerts.map(alert => {
+          const levelClass = getAlertLevelClass(alert.level);
+          const iconClass = getAlertIcon(alert.type);
+          return `
+            <div class="alert-item alert-${levelClass}">
+              <div class="alert-header">
+                <i class="${iconClass}"></i>
+                <span class="alert-type">${alert.type}</span>
+                ${alert.level ? `<span class="alert-level level-${levelClass}">${alert.level}预警</span>` : ''}
+              </div>
+              <div class="alert-title">${alert.title}</div>
+              ${alert.content ? `<div class="alert-content">${alert.content}</div>` : ''}
+            </div>
+          `;
+        }).join('');
+      }
+      
+      app.innerHTML = `
+        <div class="header">
+          <div>
+            <div class="title"><i class="ri-alarm-warning-line"></i> 气象预警</div>
+            ${config.useCustomLocation && config.customCityName ? 
+              `<div class="location"><i class="ri-map-pin-line"></i> ${config.customCityName}</div>` : 
+              `<div class="location"><i class="ri-map-pin-line"></i> ${location.name || '默认位置'}</div>`
+            }
+          </div>
+          <button class="refresh-btn" onclick="refreshWeather()" title="刷新">
+            <i class="ri-refresh-line"></i>
+          </button>
+        </div>
+        <div class="alerts-container">
+          ${contentHtml}
+        </div>
+      `;
+    }
+    
+    async function callWeatherPlugin(fnName, args) {
+      try {
+        const result = await ipcRenderer.invoke('desktop-widgets:call-plugin', {
+          pluginId: 'service-weather',
+          fn: fnName,
+          args: args
+        });
+        return result?.result || result;
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    }
+    
+    async function fetchWeather() {
+      try {
+        let result;
+        if (config.useCustomLocation && config.customCityId) {
+          result = await callWeatherPlugin('getWeatherByCityId', [config.customCityId]);
+        } else {
+          result = await callWeatherPlugin('getWeather', []);
+        }
+        weatherData = result;
+        render();
+      } catch (e) {
+        weatherData = { ok: false, error: e.message };
+        render();
+      }
+    }
+    
+    async function refreshWeather() {
+      const app = document.getElementById('app');
+      app.innerHTML = `
+        <div class="loading">
+          <i class="ri-loader-4-line ri-spin"></i>
+          <span>刷新中...</span>
+        </div>
+      `;
+      await fetchWeather();
+    }
+    
+    ipcRenderer.on('config-updated', (event, newConfig) => {
+      config = { ...config, ...newConfig };
+      applyTheme();
+      fetchWeather();
+    });
+    
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (config.theme === 'auto') applyTheme();
+    });
+    
+    applyTheme();
+    fetchWeather();
+    setInterval(fetchWeather, 10 * 60 * 1000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      transition: background 0.3s, color 0.3s;
+    }
+    .container {
+      width: 100%;
+      height: 100%;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .title {
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .location {
+      font-size: 10px;
+      opacity: 0.6;
+    }
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .uv-bar {
+      width: 100%;
+      height: 8px;
+      border-radius: 4px;
+      background: linear-gradient(to right, #22c55e, #eab308, #f97316, #ef4444, #7c3aed, #8b0000);
+      margin-bottom: 12px;
+      position: relative;
+    }
+    .uv-indicator {
+      position: absolute;
+      width: 4px;
+      height: 16px;
+      background: white;
+      border-radius: 2px;
+      top: -4px;
+      transform: translateX(-50%);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+      transition: left 0.3s;
+    }
+    .uv-value-container {
+      text-align: center;
+      margin-bottom: 8px;
+    }
+    .uv-value {
+      font-size: 36px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .uv-level {
+      font-size: 14px;
+      font-weight: 600;
+      margin-top: 4px;
+    }
+    .uv-advice {
+      font-size: 11px;
+      opacity: 0.7;
+      text-align: center;
+      line-height: 1.4;
+      padding: 0 8px;
+    }
+    .level-low { color: #22c55e; }
+    .level-moderate { color: #eab308; }
+    .level-high { color: #f97316; }
+    .level-very-high { color: #ef4444; }
+    .level-extreme { color: #7c3aed; }
+    .loading, .error {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      opacity: 0.6;
+    }
+    .loading i, .error i {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+    .refresh-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      opacity: 0.5;
+      padding: 4px;
+      transition: opacity 0.2s;
+    }
+    .refresh-btn:hover { opacity: 1; }
+    
+    .theme-light { background: rgba(255,255,255,0.95); color: #333; }
+    .theme-dark { background: rgba(30,30,40,0.9); color: #fff; }
+  </style>
+  <link rel="stylesheet" href="../../../../renderer/remixicon-local.css">
+</head>
+<body>
+  <div class="container" id="app">
+    <div class="loading">
+      <i class="ri-loader-4-line"></i>
+      <span>加载中...</span>
+    </div>
+  </div>
+  <script>
+    const { ipcRenderer } = require('electron');
+    
+    let config = {
+      useCustomLocation: false,
+      customCityId: '',
+      customCityName: '',
+      theme: 'auto'
+    };
+    
+    let weatherData = null;
+    
+    function applyTheme() {
+      const body = document.body;
+      body.classList.remove('theme-light', 'theme-dark');
+      let theme = config.theme;
+      if (theme === 'auto') {
+        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        theme = isDark ? 'dark' : 'light';
+      }
+      body.classList.add(`theme-${theme}`);
+    }
+    
+    function getUvInfo(value) {
+      if (value <= 2) return { level: 'low', label: '最弱', advice: '无需防护，可安全户外活动', color: '#22c55e' };
+      if (value <= 5) return { level: 'moderate', label: '弱', advice: '建议涂抹防晒霜，戴太阳镜', color: '#eab308' };
+      if (value <= 7) return { level: 'high', label: '中等', advice: '外出时戴遮阳帽，涂抹SPF15+防晒霜', color: '#f97316' };
+      if (value <= 10) return { level: 'very-high', label: '强', advice: '避免中午外出，必须涂抹防晒霜', color: '#ef4444' };
+      return { level: 'extreme', label: '极强', advice: '尽量避免外出，必须采取全面防护措施', color: '#7c3aed' };
+    }
+    
+    function getUvPosition(value) {
+      const max = 11;
+      const clamped = Math.min(value, max);
+      return (clamped / max) * 100;
+    }
+    
+    function render() {
+      const app = document.getElementById('app');
+      
+      if (!weatherData || weatherData.ok === false) {
+        app.innerHTML = `
+          <div class="error">
+            <i class="ri-cloud-off-line"></i>
+            <span>${weatherData?.error || '获取数据失败'}</span>
+          </div>
+        `;
+        return;
+      }
+      
+      const current = weatherData.current || {};
+      const location = weatherData.location || {};
+      const uvValue = current.uv || 0;
+      const uvInfo = getUvInfo(uvValue);
+      const position = getUvPosition(uvValue);
+      
+      app.innerHTML = `
+        <div class="header">
+          <div>
+            <div class="title"><i class="ri-sun-line"></i> 紫外线指数</div>
+            ${config.useCustomLocation && config.customCityName ? 
+              `<div class="location"><i class="ri-map-pin-line"></i> ${config.customCityName}</div>` : 
+              `<div class="location"><i class="ri-map-pin-line"></i> ${location.name || '默认位置'}</div>`
+            }
+          </div>
+          <button class="refresh-btn" onclick="refreshWeather()" title="刷新">
+            <i class="ri-refresh-line"></i>
+          </button>
+        </div>
+        <div class="main">
+          <div class="uv-bar">
+            <div class="uv-indicator" style="left: ${position}%;"></div>
+          </div>
+          <div class="uv-value-container">
+            <div class="uv-value level-${uvInfo.level}">${uvValue}</div>
+            <div class="uv-level level-${uvInfo.level}">${uvInfo.label}</div>
+          </div>
+          <div class="uv-advice">${uvInfo.advice}</div>
+        </div>
+      `;
+    }
+    
+    async function callWeatherPlugin(fnName, args) {
+      try {
+        const result = await ipcRenderer.invoke('desktop-widgets:call-plugin', {
+          pluginId: 'service-weather',
+          fn: fnName,
+          args: args
+        });
+        return result?.result || result;
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    }
+    
+    async function fetchWeather() {
+      try {
+        let result;
+        if (config.useCustomLocation && config.customCityId) {
+          result = await callWeatherPlugin('getWeatherByCityId', [config.customCityId]);
+        } else {
+          result = await callWeatherPlugin('getWeather', []);
+        }
+        weatherData = result;
+        render();
+      } catch (e) {
+        weatherData = { ok: false, error: e.message };
+        render();
+      }
+    }
+    
+    async function refreshWeather() {
+      const app = document.getElementById('app');
+      app.innerHTML = `
+        <div class="loading">
+          <i class="ri-loader-4-line ri-spin"></i>
+          <span>刷新中...</span>
+        </div>
+      `;
+      await fetchWeather();
+    }
+    
+    ipcRenderer.on('config-updated', (event, newConfig) => {
+      config = { ...config, ...newConfig };
+      applyTheme();
+      fetchWeather();
+    });
+    
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (config.theme === 'auto') applyTheme();
+    });
+    
+    applyTheme();
+    fetchWeather();
+    setInterval(fetchWeather, 10 * 60 * 1000);
+  </script>
+</body>
+</html>

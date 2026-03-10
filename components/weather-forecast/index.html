@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      transition: background 0.3s, color 0.3s;
+    }
+    .container {
+      width: 100%;
+      height: 100%;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+    }
+    .title {
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .location {
+      font-size: 11px;
+      opacity: 0.6;
+    }
+    .forecast-list {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      overflow-y: auto;
+    }
+    .forecast-item {
+      display: flex;
+      align-items: center;
+      padding: 8px 10px;
+      background: rgba(128, 128, 128, 0.08);
+      border-radius: 8px;
+      transition: background 0.2s;
+    }
+    .forecast-item:hover {
+      background: rgba(128, 128, 128, 0.15);
+    }
+    .day-name {
+      width: 50px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .day-date {
+      width: 45px;
+      font-size: 10px;
+      opacity: 0.6;
+    }
+    .weather-icon {
+      width: 28px;
+      text-align: center;
+      font-size: 18px;
+    }
+    .condition {
+      flex: 1;
+      font-size: 11px;
+      opacity: 0.8;
+      margin-left: 8px;
+    }
+    .temps {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .temp-high {
+      font-weight: 600;
+    }
+    .temp-low {
+      opacity: 0.6;
+    }
+    .pop {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      font-size: 10px;
+      opacity: 0.7;
+      width: 40px;
+      text-align: right;
+    }
+    .pop i {
+      font-size: 12px;
+    }
+    .loading, .error {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      opacity: 0.6;
+    }
+    .loading i, .error i {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+    .refresh-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      opacity: 0.5;
+      padding: 4px;
+      transition: opacity 0.2s;
+    }
+    .refresh-btn:hover { opacity: 1; }
+    
+    .theme-light { background: rgba(255,255,255,0.95); color: #333; }
+    .theme-dark { background: rgba(30,30,40,0.9); color: #fff; }
+  </style>
+  <link rel="stylesheet" href="../../../../renderer/remixicon-local.css">
+</head>
+<body>
+  <div class="container" id="app">
+    <div class="loading">
+      <i class="ri-loader-4-line"></i>
+      <span>加载中...</span>
+    </div>
+  </div>
+  <script>
+    const { ipcRenderer } = require('electron');
+    
+    let config = {
+      useCustomLocation: false,
+      customCityId: '',
+      customCityName: '',
+      theme: 'auto',
+      days: 5
+    };
+    
+    let weatherData = null;
+    
+    const WEATHER_ICONS = {
+      '0': 'ri-sun-line', '1': 'ri-sun-cloudy-line', '2': 'ri-cloud-line',
+      '3': 'ri-rainy-line', '4': 'ri-thunderstorms-line', '5': 'ri-hail-line',
+      '6': 'ri-snowy-line', '7': 'ri-drizzle-line', '8': 'ri-rainy-line',
+      '9': 'ri-heavy-showers-line', '10': 'ri-heavy-showers-line',
+      '11': 'ri-heavy-showers-line', '12': 'ri-heavy-showers-line',
+      '13': 'ri-snowy-line', '14': 'ri-snowy-line', '15': 'ri-snowy-line',
+      '16': 'ri-snowy-fill', '17': 'ri-snowy-fill', '18': 'ri-mist-line',
+      '19': 'ri-hail-line', '20': 'ri-sandstorm-line', '21': 'ri-rainy-line',
+      '22': 'ri-heavy-showers-line', '23': 'ri-heavy-showers-line',
+      '24': 'ri-heavy-showers-line', '25': 'ri-heavy-showers-line',
+      '26': 'ri-snowy-line', '27': 'ri-snowy-line', '28': 'ri-snowy-fill',
+      '29': 'ri-haze-line', '30': 'ri-sandstorm-line', '31': 'ri-sandstorm-line',
+      '32': 'ri-smog-line', '49': 'ri-mist-line', '53': 'ri-smog-line',
+      '54': 'ri-smog-line', '55': 'ri-smog-line', '56': 'ri-smog-line'
+    };
+    
+    function getWeatherIcon(code) {
+      return WEATHER_ICONS[String(code)] || 'ri-sun-line';
+    }
+    
+    function applyTheme() {
+      const body = document.body;
+      body.classList.remove('theme-light', 'theme-dark');
+      let theme = config.theme;
+      if (theme === 'auto') {
+        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        theme = isDark ? 'dark' : 'light';
+      }
+      body.classList.add(`theme-${theme}`);
+    }
+    
+    function getDayName(dateStr) {
+      if (!dateStr) return '';
+      const date = new Date(dateStr);
+      const today = new Date();
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      if (date.toDateString() === today.toDateString()) return '今天';
+      if (date.toDateString() === tomorrow.toDateString()) return '明天';
+      
+      const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+      return days[date.getDay()];
+    }
+    
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      const date = new Date(dateStr);
+      return `${date.getMonth() + 1}/${date.getDate()}`;
+    }
+    
+    function render() {
+      const app = document.getElementById('app');
+      
+      if (!weatherData || weatherData.ok === false) {
+        app.innerHTML = `
+          <div class="error">
+            <i class="ri-cloud-off-line"></i>
+            <span>${weatherData?.error || '获取天气失败'}</span>
+          </div>
+        `;
+        return;
+      }
+      
+      const forecast = weatherData.forecast || [];
+      const location = weatherData.location || {};
+      const days = Math.min(config.days, forecast.length);
+      
+      let itemsHtml = '';
+      for (let i = 0; i < days; i++) {
+        const day = forecast[i];
+        const iconClass = getWeatherIcon(day.conditionCode);
+        const pop = day.pop || 0;
+        
+        itemsHtml += `
+          <div class="forecast-item">
+            <div class="day-name">${getDayName(day.date)}</div>
+            <div class="day-date">${formatDate(day.date)}</div>
+            <div class="weather-icon"><i class="${iconClass}"></i></div>
+            <div class="condition">${day.condition || '--'}</div>
+            ${pop > 0 ? `<div class="pop"><i class="ri-drop-line"></i>${pop}%</div>` : '<div class="pop"></div>'}
+            <div class="temps">
+              <span class="temp-high">${day.tempMax ?? '--'}°</span>
+              <span class="temp-low">${day.tempMin ?? '--'}°</span>
+            </div>
+          </div>
+        `;
+      }
+      
+      app.innerHTML = `
+        <div class="header">
+          <div>
+            <div class="title"><i class="ri-calendar-line"></i> 天气预报</div>
+            ${config.useCustomLocation && config.customCityName ? 
+              `<div class="location"><i class="ri-map-pin-line"></i> ${config.customCityName}</div>` : 
+              `<div class="location"><i class="ri-map-pin-line"></i> ${location.name || '默认位置'}</div>`
+            }
+          </div>
+          <button class="refresh-btn" onclick="refreshWeather()" title="刷新">
+            <i class="ri-refresh-line"></i>
+          </button>
+        </div>
+        <div class="forecast-list">
+          ${itemsHtml}
+        </div>
+      `;
+    }
+    
+    async function callWeatherPlugin(fnName, args) {
+      try {
+        const result = await ipcRenderer.invoke('desktop-widgets:call-plugin', {
+          pluginId: 'service-weather',
+          fn: fnName,
+          args: args
+        });
+        return result?.result || result;
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    }
+    
+    async function fetchWeather() {
+      try {
+        let result;
+        if (config.useCustomLocation && config.customCityId) {
+          result = await callWeatherPlugin('getWeatherByCityId', [config.customCityId]);
+        } else {
+          result = await callWeatherPlugin('getWeather', []);
+        }
+        weatherData = result;
+        render();
+      } catch (e) {
+        weatherData = { ok: false, error: e.message };
+        render();
+      }
+    }
+    
+    async function refreshWeather() {
+      const app = document.getElementById('app');
+      app.innerHTML = `
+        <div class="loading">
+          <i class="ri-loader-4-line ri-spin"></i>
+          <span>刷新中...</span>
+        </div>
+      `;
+      await fetchWeather();
+    }
+    
+    ipcRenderer.on('config-updated', (event, newConfig) => {
+      config = { ...config, ...newConfig };
+      applyTheme();
+      fetchWeather();
+    });
+    
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (config.theme === 'auto') applyTheme();
+    });
+    
+    applyTheme();
+    fetchWeather();
+    setInterval(fetchWeather, 10 * 60 * 1000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      transition: background 0.3s, color 0.3s;
+    }
+    .container {
+      width: 100%;
+      height: 100%;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .title {
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .location {
+      font-size: 10px;
+      opacity: 0.6;
+    }
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .sun-arc {
+      width: 100%;
+      height: 60px;
+      position: relative;
+      margin-bottom: 8px;
+    }
+    .arc-path {
+      position: absolute;
+      bottom: 0;
+      left: 10%;
+      right: 10%;
+      height: 100%;
+      border: 2px dashed rgba(234, 179, 8, 0.4);
+      border-bottom: none;
+      border-radius: 50% 50% 0 0;
+    }
+    .sun-position {
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      background: #eab308;
+      border-radius: 50%;
+      box-shadow: 0 0 10px rgba(234, 179, 8, 0.5);
+      transform: translate(-50%, -50%);
+      transition: left 0.3s, bottom 0.3s;
+    }
+    .times {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      padding: 0 5%;
+    }
+    .time-block {
+      text-align: center;
+    }
+    .time-icon {
+      font-size: 16px;
+      margin-bottom: 2px;
+    }
+    .time-value {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .time-label {
+      font-size: 10px;
+      opacity: 0.6;
+    }
+    .daylight {
+      font-size: 11px;
+      opacity: 0.7;
+      margin-top: 8px;
+    }
+    .loading, .error {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      opacity: 0.6;
+    }
+    .loading i, .error i {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+    .refresh-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      opacity: 0.5;
+      padding: 4px;
+      transition: opacity 0.2s;
+    }
+    .refresh-btn:hover { opacity: 1; }
+    
+    .theme-light { background: rgba(255,255,255,0.95); color: #333; }
+    .theme-dark { background: rgba(30,30,40,0.9); color: #fff; }
+  </style>
+  <link rel="stylesheet" href="../../../../renderer/remixicon-local.css">
+  <!-- <link rel="stylesheet" href="../../../renderer/remixicon-local.css"> -->
+</head>
+<body>
+  <div class="container" id="app">
+    <div class="loading">
+      <i class="ri-loader-4-line"></i>
+      <span>加载中...</span>
+    </div>
+  </div>
+  <script>
+    const { ipcRenderer } = require('electron');
+    
+    let config = {
+      useCustomLocation: false,
+      customCityId: '',
+      customCityName: '',
+      theme: 'auto'
+    };
+    
+    let weatherData = null;
+    
+    function applyTheme() {
+      const body = document.body;
+      body.classList.remove('theme-light', 'theme-dark');
+      let theme = config.theme;
+      if (theme === 'auto') {
+        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        theme = isDark ? 'dark' : 'light';
+      }
+      body.classList.add(`theme-${theme}`);
+    }
+    
+    function parseSunTime(data) {
+      try {
+        const raw = data?.raw;
+        if (raw && raw.forecastDaily && raw.forecastDaily.sunRiseSet) {
+          const sunData = raw.forecastDaily.sunRiseSet;
+          if (Array.isArray(sunData.value) && sunData.value.length > 0) {
+            const today = sunData.value[0];
+            return {
+              sunrise: today.sunRise || today.from || '',
+              sunset: today.sunSet || today.to || ''
+            };
+          }
+        }
+      } catch (e) {}
+      return { sunrise: '', sunset: '' };
+    }
+    
+    function formatTime(isoString) {
+      if (!isoString) return '--:--';
+      try {
+        const date = new Date(isoString);
+        return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+      } catch (e) {
+        return '--:--';
+      }
+    }
+    
+    function calculateDaylight(sunrise, sunset) {
+      if (!sunrise || !sunset) return '';
+      try {
+        const rise = new Date(sunrise);
+        const set = new Date(sunset);
+        const diff = set - rise;
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        return `日照时长 ${hours}小时${minutes}分钟`;
+      } catch (e) {
+        return '';
+      }
+    }
+    
+    function calculateSunPosition(sunrise, sunset) {
+      const now = new Date();
+      const rise = new Date(sunrise);
+      const set = new Date(sunset);
+      
+      if (now < rise) {
+        return { left: 10, bottom: 0 };
+      }
+      if (now > set) {
+        return { left: 90, bottom: 0 };
+      }
+      
+      const total = set - rise;
+      const elapsed = now - rise;
+      const progress = elapsed / total;
+      
+      const left = 10 + progress * 80;
+      const bottom = Math.sin(progress * Math.PI) * 100;
+      
+      return { left, bottom };
+    }
+    
+    function render() {
+      const app = document.getElementById('app');
+      
+      if (!weatherData || weatherData.ok === false) {
+        app.innerHTML = `
+          <div class="error">
+            <i class="ri-cloud-off-line"></i>
+            <span>${weatherData?.error || '获取数据失败'}</span>
+          </div>
+        `;
+        return;
+      }
+      
+      const location = weatherData.location || {};
+      const { sunrise, sunset } = parseSunTime(weatherData);
+      const pos = calculateSunPosition(sunrise, sunset);
+      const daylight = calculateDaylight(sunrise, sunset);
+      
+      app.innerHTML = `
+        <div class="header">
+          <div>
+            <div class="title"><i class="ri-sun-foggy-line"></i> 日出日落</div>
+            ${config.useCustomLocation && config.customCityName ? 
+              `<div class="location"><i class="ri-map-pin-line"></i> ${config.customCityName}</div>` : 
+              `<div class="location"><i class="ri-map-pin-line"></i> ${location.name || '默认位置'}</div>`
+            }
+          </div>
+          <button class="refresh-btn" onclick="refreshWeather()" title="刷新">
+            <i class="ri-refresh-line"></i>
+          </button>
+        </div>
+        <div class="main">
+          <div class="sun-arc">
+            <div class="arc-path"></div>
+            <div class="sun-position" style="left: ${pos.left}%; bottom: ${pos.bottom}%;"></div>
+          </div>
+          <div class="times">
+            <div class="time-block">
+              <div class="time-icon"><i class="ri-sun-line" style="color: #eab308;"></i></div>
+              <div class="time-value">${formatTime(sunrise)}</div>
+              <div class="time-label">日出</div>
+            </div>
+            <div class="time-block">
+              <div class="time-icon"><i class="ri-moon-line" style="color: #6366f1;"></i></div>
+              <div class="time-value">${formatTime(sunset)}</div>
+              <div class="time-label">日落</div>
+            </div>
+          </div>
+          ${daylight ? `<div class="daylight">${daylight}</div>` : ''}
+        </div>
+      `;
+    }
+    
+    async function callWeatherPlugin(fnName, args) {
+      try {
+        const result = await ipcRenderer.invoke('desktop-widgets:call-plugin', {
+          pluginId: 'service-weather',
+          fn: fnName,
+          args: args
+        });
+        return result?.result || result;
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    }
+    
+    async function fetchWeather() {
+      try {
+        let result;
+        if (config.useCustomLocation && config.customCityId) {
+          result = await callWeatherPlugin('getWeatherByCityId', [config.customCityId]);
+        } else {
+          result = await callWeatherPlugin('getWeather', []);
+        }
+        weatherData = result;
+        render();
+      } catch (e) {
+        weatherData = { ok: false, error: e.message };
+        render();
+      }
+    }
+    
+    async function refreshWeather() {
+      const app = document.getElementById('app');
+      app.innerHTML = `
+        <div class="loading">
+          <i class="ri-loader-4-line ri-spin"></i>
+          <span>刷新中...</span>
+        </div>
+      `;
+      await fetchWeather();
+    }
+    
+    ipcRenderer.on('config-updated', (event, newConfig) => {
+      config = { ...config, ...newConfig };
+      applyTheme();
+      fetchWeather();
+    });
+    
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (config.theme === 'auto') applyTheme();
+    });
+    
+    applyTheme();
+    fetchWeather();
+    
+    setInterval(() => render(), 60000);
+    setInterval(fetchWeather, 10 * 60 * 1000);
+  </script>
+</body>
+</html>

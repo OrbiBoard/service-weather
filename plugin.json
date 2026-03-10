@@ -6,6 +6,7 @@
   "type": "service",
   "description": "天气服务插件：提供天气查询功能，支持城市搜索、经纬度定位、IP定位",
   "id": "service-weather",
+  "componentsDir": "components",
   "actions": [
     {
       "id": "openSettings",

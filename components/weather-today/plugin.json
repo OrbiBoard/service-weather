@@ -1,0 +1,51 @@
+{
+  "id": "weather-today-widget",
+  "name": "今日天气",
+  "icon": "ri-sun-line",
+  "version": "1.0.0",
+  "type": "component",
+  "author": "OrbiBoard",
+  "entry": "index.html",
+  "description": "显示今日天气情况，包括温度、天气状况、体感温度等",
+  "group": "desktop_widget",
+  "recommendedSize": {
+    "width": 280,
+    "height": 200
+  },
+  "configSchema": {
+    "useCustomLocation": {
+      "type": "boolean",
+      "label": "使用独立定位",
+      "desc": "启用后可为此组件设置独立的城市位置",
+      "default": false
+    },
+    "customCityId": {
+      "type": "string",
+      "label": "城市ID",
+      "desc": "独立定位的城市ID（需先启用独立定位）",
+      "default": ""
+    },
+    "customCityName": {
+      "type": "string",
+      "label": "城市名称",
+      "desc": "独立定位的城市名称",
+      "default": ""
+    },
+    "theme": {
+      "type": "select",
+      "label": "主题",
+      "default": "auto",
+      "options": [
+        { "label": "跟随系统", "value": "auto" },
+        { "label": "浅色", "value": "light" },
+        { "label": "深色", "value": "dark" }
+      ]
+    },
+    "showDetails": {
+      "type": "boolean",
+      "label": "显示详细信息",
+      "desc": "显示湿度、风速、气压等详细信息",
+      "default": true
+    }
+  }
+}

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      transition: background 0.3s, color 0.3s;
+    }
+    .container {
+      width: 100%;
+      height: 100%;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .title {
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .location {
+      font-size: 10px;
+      opacity: 0.6;
+    }
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .aqi-circle {
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      margin-bottom: 8px;
+    }
+    .aqi-value {
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .aqi-label {
+      font-size: 10px;
+      margin-top: 2px;
+      opacity: 0.8;
+    }
+    .aqi-level {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .aqi-desc {
+      font-size: 11px;
+      opacity: 0.7;
+      text-align: center;
+    }
+    .level-excellent { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .level-good { background: rgba(132, 204, 22, 0.2); color: #84cc16; }
+    .level-light { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+    .level-moderate { background: rgba(249, 115, 22, 0.2); color: #f97316; }
+    .level-heavy { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .level-severe { background: rgba(139, 0, 0, 0.2); color: #8b0000; }
+    .loading, .error {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      opacity: 0.6;
+    }
+    .loading i, .error i {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+    .refresh-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      opacity: 0.5;
+      padding: 4px;
+      transition: opacity 0.2s;
+    }
+    .refresh-btn:hover { opacity: 1; }
+    
+    .theme-light { background: rgba(255,255,255,0.95); color: #333; }
+    .theme-dark { background: rgba(30,30,40,0.9); color: #fff; }
+  </style>
+  <link rel="stylesheet" href="../../../../renderer/remixicon-local.css">
+</head>
+<body>
+  <div class="container" id="app">
+    <div class="loading">
+      <i class="ri-loader-4-line"></i>
+      <span>加载中...</span>
+    </div>
+  </div>
+  <script>
+    const { ipcRenderer } = require('electron');
+    
+    let config = {
+      useCustomLocation: false,
+      customCityId: '',
+      customCityName: '',
+      theme: 'auto'
+    };
+    
+    let weatherData = null;
+    
+    function applyTheme() {
+      const body = document.body;
+      body.classList.remove('theme-light', 'theme-dark');
+      let theme = config.theme;
+      if (theme === 'auto') {
+        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        theme = isDark ? 'dark' : 'light';
+      }
+      body.classList.add(`theme-${theme}`);
+    }
+    
+    function getAqiInfo(value) {
+      if (value <= 50) return { level: 'excellent', label: '优', desc: '空气质量令人满意，基本无污染' };
+      if (value <= 100) return { level: 'good', label: '良', desc: '空气质量可接受，某些污染物可能对极少数敏感人群有轻微影响' };
+      if (value <= 150) return { level: 'light', label: '轻度污染', desc: '敏感人群症状会有轻度加剧，健康人群出现刺激症状' };
+      if (value <= 200) return { level: 'moderate', label: '中度污染', desc: '进一步加剧敏感人群症状，可能对健康人群心脏、呼吸系统有影响' };
+      if (value <= 300) return { level: 'heavy', label: '重度污染', desc: '健康人群运动耐受力降低，有明显强烈症状' };
+      return { level: 'severe', label: '严重污染', desc: '健康人群运动耐受力降低，有明显强烈症状，提前出现某些疾病' };
+    }
+    
+    function render() {
+      const app = document.getElementById('app');
+      
+      if (!weatherData || weatherData.ok === false) {
+        app.innerHTML = `
+          <div class="error">
+            <i class="ri-cloud-off-line"></i>
+            <span>${weatherData?.error || '获取空气质量失败'}</span>
+          </div>
+        `;
+        return;
+      }
+      
+      const aqi = weatherData.aqi || {};
+      const location = weatherData.location || {};
+      const aqiValue = aqi.value || 0;
+      const aqiInfo = getAqiInfo(aqiValue);
+      
+      app.innerHTML = `
+        <div class="header">
+          <div>
+            <div class="title"><i class="ri-leaf-line"></i> 空气质量</div>
+            ${config.useCustomLocation && config.customCityName ? 
+              `<div class="location"><i class="ri-map-pin-line"></i> ${config.customCityName}</div>` : 
+              `<div class="location"><i class="ri-map-pin-line"></i> ${location.name || '默认位置'}</div>`
+            }
+          </div>
+          <button class="refresh-btn" onclick="refreshWeather()" title="刷新">
+            <i class="ri-refresh-line"></i>
+          </button>
+        </div>
+        <div class="main">
+          <div class="aqi-circle level-${aqiInfo.level}">
+            <div class="aqi-value">${aqiValue}</div>
+            <div class="aqi-label">AQI</div>
+          </div>
+          <div class="aqi-level">${aqiInfo.label}</div>
+          <div class="aqi-desc">${aqiInfo.desc}</div>
+        </div>
+      `;
+    }
+    
+    async function callWeatherPlugin(fnName, args) {
+      try {
+        const result = await ipcRenderer.invoke('desktop-widgets:call-plugin', {
+          pluginId: 'service-weather',
+          fn: fnName,
+          args: args
+        });
+        return result?.result || result;
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    }
+    
+    async function fetchWeather() {
+      try {
+        let result;
+        if (config.useCustomLocation && config.customCityId) {
+          result = await callWeatherPlugin('getWeatherByCityId', [config.customCityId]);
+        } else {
+          result = await callWeatherPlugin('getWeather', []);
+        }
+        weatherData = result;
+        render();
+      } catch (e) {
+        weatherData = { ok: false, error: e.message };
+        render();
+      }
+    }
+    
+    async function refreshWeather() {
+      const app = document.getElementById('app');
+      app.innerHTML = `
+        <div class="loading">
+          <i class="ri-loader-4-line ri-spin"></i>
+          <span>刷新中...</span>
+        </div>
+      `;
+      await fetchWeather();
+    }
+    
+    ipcRenderer.on('config-updated', (event, newConfig) => {
+      config = { ...config, ...newConfig };
+      applyTheme();
+      fetchWeather();
+    });
+    
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (config.theme === 'auto') applyTheme();
+    });
+    
+    applyTheme();
+    fetchWeather();
+    setInterval(fetchWeather, 10 * 60 * 1000);
+  </script>
+</body>
+</html>
